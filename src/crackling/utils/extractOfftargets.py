@@ -1,21 +1,17 @@
 #!/usr/bin/python3.6
 '''
-Faster and better CRISPR guide RNA design with the Crackling method.
-Jacob Bradford, Timothy Chappell, Dimitri Perrin
-bioRxiv 2020.02.14.950261; doi: https://doi.org/10.1101/2020.02.14.950261
-
-
-Purpose:    identify all offtarget sites in the whole genome
+Purpose:    identify all offtarget sites in the whole genome when considering variants
 
 Input:      FASTA, or multi-FASTA, formatted file
 
 Output:     one file with all the sites
 
-To use:     python3.7 ExtractOfftargets.py output-file  (input-files... | input-dir>)
+To use:     extractOfftargets.py output-file  (input-files... | input-dir>) --vcf vcf-file
 
 '''
 
-import glob, multiprocessing, os, re, shutil, sys, tempfile, heapq, argparse
+import glob, multiprocessing, os, re, shutil, tempfile, heapq, argparse
+from ast import literal_eval
 from crackling.Helpers import *
 from crackling.Paginator import Paginator
 
@@ -53,7 +49,8 @@ def explodeMultiFastaFile(fpInput, fpOutputTempDir):
                 fWrite.write('\n')
 
             if line[0] != '>':
-                fWrite.write(line.upper().strip())
+                #fWrite.write(line.upper().strip())
+                fWrite.write(line.strip())
         
         # close the last file if necessary
         if fWrite is not None:
@@ -61,7 +58,7 @@ def explodeMultiFastaFile(fpInput, fpOutputTempDir):
             
     return newFilesPaths
 
-def processingNode(fpInputs, fpOutputTempDir = None):
+def processingNode(fpInputs, fpOutputTempDir, fpVcf):
     # Create a temporary file
     fpTemp = tempfile.NamedTemporaryFile(
         mode = 'w+', 
@@ -81,18 +78,34 @@ def processingNode(fpInputs, fpOutputTempDir = None):
                 
                 for line in inFile:
                     if line[0] == '>':
-                        header = line[1:]
+                        header = line[1:].strip()
                         seqsByHeader[header] = []
                     else:
                         if header not in seqsByHeader:
                             # it could be a plain text file, without a header
                             seqsByHeader[header] = []
-                        seqsByHeader[header].append(line.rstrip().upper())
+                        seqsByHeader[header].append(line.strip())#.upper())
 
             # For each FASTA sequence
             offtargets = [] 
             for header in seqsByHeader:
                 seq = ''.join(seqsByHeader[header])
+                
+                # read VCF file, only keep the records for this sequence
+                vcf = []
+                with open(fpVcf,'r') as fVcf:
+                    for line in fVcf:
+                        if line[0] == "#": # comments are ignored
+                            continue
+                            
+                        tempArray = line.rstrip().split("\t")
+
+                        if tempArray[6] != "PASS" or tempArray[0] != header: 
+                            # in our case, the filter should always be "PASS"
+                            # and the record be relevant to our sequence
+                            continue
+
+                        vcf.append(tempArray)
                 
                 for strand, pattern, seqModifier in [
                     ['positive', pattern_forward_offsite, lambda x : x],
@@ -100,11 +113,29 @@ def processingNode(fpInputs, fpOutputTempDir = None):
                 ]:
                     match_chr = re.findall(pattern, seq)
 
+                    # Extract off-targets using the exact sequence
                     for i in range(0,len(match_chr)):
                         offtargets.append(
-                            seqModifier(match_chr[i][0:20])
+                            seqModifier(match_chr[i])[0:20]
                         )
-                
+
+                    # Extract off-targets considering VCF
+                    for record in vcf:
+                    
+                        pos = literal_eval(record[1])-1 # with -1 because VCF POS is 1-based
+                        ref = record[3]
+                        alt = record[4]
+                        
+                        tempArray = alt.split(",")
+                        for el in tempArray:
+                            alt_seq = seq[pos-22:pos] + el + seq[pos+len(ref):pos+len(ref)+23]
+
+                            match_chr = re.findall(pattern, alt_seq)
+                            for i in range(0,len(match_chr)):
+                                offtargets.append(
+                                    seqModifier(match_chr[i])[0:20]
+                                )
+                    
             outFile.write(''.join(f'{offTarget}\n' for offTarget in offtargets))
             return len(offtargets)
 
@@ -156,41 +187,44 @@ def paginatedSort(filesToSort, fpOutput, mpPool, maxNumOpenFiles=400):
         )
     )
     
-    # Open all the sorted files to merge
-    printer(f'Beginning to merge sorted files, {maxNumOpenFiles:,} at a time')
-    while len(sortedFiles) > 1:
-        # A file to write the merged sequences to
-        mergedFile = tempfile.NamedTemporaryFile(delete = False)
+    if len(sortedFiles) == 1:
+        shutil.move(sortedFiles[0], fpOutput)
+    else:
+        # Open all the sorted files to merge
+        printer(f'Beginning to merge sorted files, {maxNumOpenFiles:,} at a time')
+        while len(sortedFiles) > 1:
+            # A file to write the merged sequences to
+            mergedFile = tempfile.NamedTemporaryFile(delete = False)
+            
+            # Select the files to merge
+            while True:
+                try:
+                    sortedFilesPointers = [open(file, 'r') for file in sortedFiles[:maxNumOpenFiles]]
+                    break
+                except OSError as e:
+                    if e.errno == 24:
+                        printer(f'Attempted to open too many files at once (OSError errno 24)')
+                        maxNumOpenFiles = max(1, int(maxNumOpenFiles / 2))
+                        printer(f'Reducing the number of files that can be opened by half to {maxNumOpenFiles}')
+                        continue
+                    raise e
+                        
+            printer(f'Merging {len(sortedFilesPointers):,}')
+            
+            # Merge and write
+            with open(mergedFile.name, 'w') as f:
+                f.writelines(heapq.merge(*sortedFilesPointers))
+            
+            # Close all of the open files
+            for file in sortedFilesPointers:
+                file.close()
+              
+            # prepare for the next set to be merged
+            sortedFiles = sortedFiles[maxNumOpenFiles:] + [mergedFile.name]
         
-        # Select the files to merge
-        while True:
-            try:
-                sortedFilesPointers = [open(file, 'r') for file in sortedFiles[:maxNumOpenFiles]]
-                break
-            except OSError as e:
-                if e.errno == 24:
-                    printer(f'Attempted to open too many files at once (OSError errno 24)')
-                    maxNumOpenFiles = max(1, int(maxNumOpenFiles / 2))
-                    printer(f'Reducing the number of files that can be opened by half to {maxNumOpenFiles}')
-                    continue
-                raise e
-                    
-        printer(f'Merging {len(sortedFilesPointers):,}')
-        
-        # Merge and write
-        with open(mergedFile.name, 'w') as f:
-            f.writelines(heapq.merge(*sortedFilesPointers))
-        
-        # Close all of the open files
-        for file in sortedFilesPointers:
-            file.close()
-          
-        # prepare for the next set to be merged
-        sortedFiles = sortedFiles[maxNumOpenFiles:] + [mergedFile.name]
-    
-    shutil.move(mergedFile.name, fpOutput)
+        shutil.move(mergedFile.name, fpOutput)
 
-def startMultiprocessing(fpInputs, fpOutput, mpPool, numThreads, maxOpenFiles):
+def startMultiprocessing(fpInputs, fpOutput, mpPool, numThreads, maxOpenFiles, fpVcf):
     printer('Extracting off-targets using multiprocessing approach')
     
     printer(f'Allowed processes: {numThreads}')
@@ -224,7 +258,8 @@ def startMultiprocessing(fpInputs, fpOutput, mpPool, numThreads, maxOpenFiles):
     args = [
         (
             [fpInput],
-            fpTempDir.name 
+            fpTempDir.name,
+            fpVcf
         ) for fpInput in fpInputs
     ]
 
@@ -253,7 +288,7 @@ def startMultiprocessing(fpInputs, fpOutput, mpPool, numThreads, maxOpenFiles):
     )
 
 def main():
-    parser = argparse.ArgumentParser(description='Extract CRISPR target sites for Crackling.')
+    parser = argparse.ArgumentParser(description='Extract CRISPR target sites for Crackling-phased.')
     
     parser.add_argument('output',
         help='A file to write the off-targets to.'
@@ -261,6 +296,10 @@ def main():
     parser.add_argument('inputs',
         help='A space-separated list of paths or a path containing wildcards to FASTA files.',
         nargs='+'
+    )
+    parser.add_argument('--vcf', 
+        help='Path to VCF file.',
+        required=True
     )
     parser.add_argument('--maxOpenFiles', 
         help='The number of files allowed to be opened by a single process. Use `ulimit -n` to find out your system setting.', 
@@ -286,7 +325,8 @@ def main():
         args.output, 
         mpPool, 
         args.threads, 
-        args.maxOpenFiles
+        args.maxOpenFiles,
+        args.vcf
     )
     
     # Clean up. Close multiprocessing pool
