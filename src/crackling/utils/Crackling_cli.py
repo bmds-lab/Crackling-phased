@@ -7,7 +7,7 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', help='The config file for Crackling', default=None, required=True)
+    parser.add_argument('-c', '--config', help='The config file for HaploCrackling', default=None, required=True)
 
     args = parser.parse_args()
 
@@ -16,7 +16,7 @@ def main():
         print('Something went wrong with reading the configuration.')
         exit()
     else:
-        printer('Crackling is starting...')
+        printer('HaploCrackling is starting...')
 
     Crackling(cm)
     
