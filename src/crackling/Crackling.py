@@ -7,7 +7,7 @@ Config:
     - See config.ini
 '''
 
-import ast, csv, joblib, os, re, sys, time, tempfile
+import ast, csv, joblib, os, re, sys, time, tempfile, shutil
 
 from crackling.Paginator import Paginator
 from crackling.Batchinator import Batchinator
@@ -176,6 +176,7 @@ def Crackling(configMngr):
     printer('Mapping VCF file')
     header_to_vcf = {}
     with open(configMngr['input']['vcf-file'],'r') as inFile:
+        idx = 0
         for line in inFile:
             if line.startswith('#'):
                 continue
@@ -200,10 +201,15 @@ def Crackling(configMngr):
 
             if fields[0] not in header_to_vcf:
                 header_to_vcf[fields[0]] = []
-            header_to_vcf[fields[0]].append(fields)
+                
+            # map the VCF file in memory. keep track of the line number associated with this record
+            header_to_vcf[fields[0]].append([idx] + fields)
+            
+            idx += 1
 
+    printer('Number of VCF records per sequence:')
     for chr in header_to_vcf:
-        print(chr, len(header_to_vcf[chr]))
+        printer(f'{chr}, {len(header_to_vcf[chr])}')
 
     printer('Analysing FASTA files...')
 
@@ -245,7 +251,9 @@ def Crackling(configMngr):
                 continue
             else:
                 for tempArray in header_to_vcf[header]:
-
+                    idx = tempArray[0]
+                    tempArray = tempArray[1:]
+                    
                     filter = tempArray[6]
 
                     chr = tempArray[0]
@@ -334,21 +342,18 @@ def Crackling(configMngr):
                                     start,
                                     start + 23,
                                     strand,
-                                    f'{chr}:{pos}_{match_pos}_{allele_seq}_{strand}'
+                                    f'{chr}:{pos}_{match_pos}_{allele_seq}_{strand}:{idx}'
                                 ])
                             else:
                                 duplicateGuides.add(target23)
                                 numDuplicateGuides += 1
 
-                                #targetsData[target23]['vcfData'] = f'{chr}:{pos}_{match_pos}_{allele_seq}_{strand}'
-
-
-
-        duplicatePercent = round(numDuplicateGuides / numIdentifiedGuides * 100.0, 3)
-        printer(f'\tIdentified {numIdentifiedGuides:,} possible target sites in this file.')
-        printer(f'\tOf these, {len(duplicateGuides):,} are not unique. These sites occur a total of {numDuplicateGuides} times.')
-        printer(f'\tRemoving {numDuplicateGuides:,} of {numIdentifiedGuides:,} ({duplicatePercent}%) guides.')
-        printer(f'\t{len(candidateGuides):,} distinct guides have been discovered so far.')
+        if numIdentifiedGuides > 0:
+            duplicatePercent = round(numDuplicateGuides / numIdentifiedGuides * 100.0, 3)
+            printer(f'\tIdentified {numIdentifiedGuides:,} possible target sites in this file.')
+            printer(f'\tOf these, {len(duplicateGuides):,} are not unique. These sites occur a total of {numDuplicateGuides} times.')
+            printer(f'\tRemoving {numDuplicateGuides:,} of {numIdentifiedGuides:,} ({duplicatePercent}%) guides.')
+            printer(f'\t{len(candidateGuides):,} distinct guides have been discovered so far.')
 
         completedSizeBytes += seqFileSize
         completedPercent = round(completedSizeBytes / totalSizeBytes * 100.0, 3)
@@ -525,7 +530,7 @@ def Crackling(configMngr):
                     check=True
                 )
 
-                os.replace('RNAfold_output.fold' ,configMngr['rnafold']['output'])
+                shutil.move('RNAfold_output.fold' ,configMngr['rnafold']['output'])
 
                 printer('\t\tStarting to process the RNAfold results.')
 
