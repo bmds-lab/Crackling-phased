@@ -7,14 +7,14 @@ Config:
     - See config.ini
 '''
 
-import ast, csv, joblib, os, re, sys, time, tempfile
+import ast, csv, joblib, os, re, sys, time, tempfile, shutil
 
-from crackling.Paginator import Paginator
-from crackling.Batchinator import Batchinator
-from crackling.Constants import *
-from crackling.Helpers import *
+from haplocrackling.Paginator import Paginator
+from haplocrackling.Batchinator import Batchinator
+from haplocrackling.Constants import *
+from haplocrackling.Helpers import *
 
-def Crackling(configMngr):
+def HaploCrackling(configMngr):
     totalSizeBytes = configMngr.getDatasetSizeBytes()
     completedSizeBytes = 0
 
@@ -168,95 +168,194 @@ def Crackling(configMngr):
     ##   Processing the input file   ##
     ###################################
 
-    printer('Analysing files...')
-
     # Sets to keep track of Guides and sequences seen before
     candidateGuides = set()
     duplicateGuides = set()
-    recordedSequences = set()
+
+    # Load the VCF file
+    printer('Mapping VCF file')
+    header_to_vcf = {}
+    with open(configMngr['input']['vcf-file'],'r') as inFile:
+        idx = 0
+        for line in inFile:
+            if line.startswith('#'):
+                continue
+            fields = line.strip().split('\t')
+            filter = fields[6]
+
+            ref = fields[3]
+            alt = fields[4]
+            additionalField = fields[9]
+
+            if filter != "PASS": # it should always be "PASS"
+                continue
+
+            if len(ref)==1 and len(alt)==1: # not interested in single point mutation
+                continue
+
+            if additionalField[1]!="|": # not interested if unphased
+                continue
+
+            if additionalField[0]==additionalField[2]: # not interested here either
+                continue
+
+            if fields[0] not in header_to_vcf:
+                header_to_vcf[fields[0]] = []
+                
+            # map the VCF file in memory. keep track of the line number associated with this record
+            header_to_vcf[fields[0]].append([idx] + fields)
+            
+            idx += 1
+
+    printer('Number of VCF records per sequence:')
+    for chr in header_to_vcf:
+        printer(f'{chr}, {len(header_to_vcf[chr])}')
+
+    printer('Analysing FASTA files...')
 
     guideBatchinator = Batchinator(int(configMngr['input']['batch-size']))
 
     printer(f'Batchinator is writing to: {guideBatchinator.workingDir.name}')
 
     for seqFilePath in configMngr.getIterFilesToProcess():
-
         numIdentifiedGuides = 0
         numDuplicateGuides = 0
 
         printer(f'Identifying possible target sites in: {seqFilePath}')
         seqFileSize = os.path.getsize(seqFilePath)
 
-        completedSizeBytes += seqFileSize
-
         # We first remove all the line breaks within a given sequence (FASTA format)
-        with open(seqFilePath, 'r') as inFile, tempfile.NamedTemporaryFile(mode='w',delete=False) as parsedFile:
+        header_to_seq = {}
+        with open(seqFilePath, 'r') as inFile:
+            header = ""
+            seq = []
+            first = True
             for line in inFile:
                 line = line.strip()
-                if line[0] == '>':
-                    # this is the header line for a new sequence, so we break the previous line and write the header as a new line
-                    parsedFile.write('\n'+line+'\n')
+                if line.startswith('>'):
+
+                    if not first:
+                        header_to_seq[header] = ''.join(seq)
+                    else:
+                        first = False
+
+                    header = line[1:].split(' ')[0]
+                    seq = []
                 else:
-                    # this is (part of) the sequence; we write it without line break
-                    parsedFile.write(line.strip())
+                    seq.append(line)
+            header_to_seq[header] = ''.join(seq)
+
+        for header in header_to_seq:
+            if header not in header_to_vcf:
+                printer(f'Warning: {header} missing in VCF')
+                continue
+            else:
+                for tempArray in header_to_vcf[header]:
+                    idx = tempArray[0]
+                    tempArray = tempArray[1:]
+                    
+                    filter = tempArray[6]
+
+                    chr = tempArray[0]
+                    pos = ast.literal_eval(tempArray[1])-1 # with -1 because VCF POS is 1-based
+                    ID = tempArray[2] # in our case, always equal to "."
+                    ref = tempArray[3]
+                    alt = tempArray[4]
+                    qual = tempArray[5]
+                    filter = tempArray[6]
+                    info = tempArray[7]
+                    format = tempArray[8]
+                    additionalField = tempArray[9]
+
+                    tempAlt = alt.split(",")
+
+                    # default case
+                    if len(tempAlt)==1:
+
+                        # we extract the 'ref' sequence
+                        ref_seq = header_to_seq[header][pos-22:pos+len(ref)+23]
+                        # we tag it with the first field of the phasing
+                        ref_seq+="_"+additionalField[0]
+
+                        # we extract the 'alt' sequence
+                        alt_seq = header_to_seq[header][pos-22:pos]+tempAlt[0]+header_to_seq[header][pos+len(ref):pos+len(ref)+23]
+                        # we tag it with the second field of the phasing
+                        alt_seq+="_"+additionalField[2]
+
+                        temp_seq1 = ref_seq.upper()
+                        temp_seq2 = alt_seq.upper()
+
+                    # other case: two 'alt' alleles, so we focus on those and ignore 'ref' (because we have already checked that in this case, the phasing is always 1|2 or 2|1)
+                    else:
+
+                        # we extract the first 'alt' sequence
+                        alt_seq1 = header_to_seq[header][pos-22:pos]+tempAlt[0]+header_to_seq[header][pos+len(ref):pos+len(ref)+23]
+                        # we tag it with the first field of the phasing
+                        alt_seq1+="_"+additionalField[0]
 
 
-        with open(parsedFile.name, 'r') as inFile:
-            seqHeader = ''
-            seq = ''
-            for line in inFile:
-                # Remove garbage from line
-                line = line.strip()
-                # Some lines (e.g., first line in file) can be just a line break, move to next line
-                if line=='':
-                    continue
-                # Header line, start of a new sequence
-                elif line[0]=='>':
-                    # If we haven't seen the sequence OR we have found a sequence without header
-                    if (seqHeader not in recordedSequences) or (seqHeader=='' and seq!=''):
-                        # Record header
-                        recordedSequences.add(seqHeader)
-                        # Process the sequence
-                        for guide in processSequence(seq):
+                        # we extract the second 'alt' sequence
+                        alt_seq2 = header_to_seq[header][pos-22:pos]+tempAlt[1]+header_to_seq[header][pos+len(ref):pos+len(ref)+23]
+                        # we tag it with the second field of the phasing
+                        alt_seq2+="_"+additionalField[2]
+
+                        temp_seq1 = alt_seq1.upper()
+                        temp_seq2 = alt_seq2.upper()
+
+
+                    # the sequence itself stops two characters before the end
+                    seq1 = temp_seq1[:-2]
+                    allele_seq1 = temp_seq1[-1:]  # the allele is the last character
+
+                    # the sequence itself stops two characters before the end
+                    seq2 = temp_seq2[:-2]
+                    allele_seq2 = temp_seq2[-1:]  # the allele is the last character
+
+                    # Patterns for guide matching
+                    pattern_forward = r'(?=([ATCG]{21}GG))'
+                    pattern_reverse = r'(?=(CC[ACGT]{21}))'
+
+                    # New sequence deteced, process sequence
+                    # once for forward, once for reverse
+                    for pattern, seq, allele_seq, strand, seqModifier in [
+                        [pattern_forward, seq1, allele_seq1, 'fw', lambda x : x],
+                        [pattern_reverse, seq1, allele_seq1, 'rv', lambda x : rc(x)],
+                        [pattern_forward, seq2, allele_seq2, 'fw', lambda x : x],
+                        [pattern_reverse, seq2, allele_seq2, 'rv', lambda x : rc(x)]
+                    ]:
+                        p = re.compile(pattern)
+
+                        for m in p.finditer(seq):
                             numIdentifiedGuides += 1
-                            # Check if guide has been seen before
-                            if guide[0] not in candidateGuides:
-                                # Record guide
-                                candidateGuides.add(guide[0])
-                                # Record candidate guide to temp file
-                                guideBatchinator.recordEntry(guide)
+
+                            start = m.start()  # start of the target
+                            target23 = seqModifier(seq[start:start+23])  # target sequence
+
+                            # position of the target relative to the start of the difference ref/alt
+                            match_pos = str(start-22)
+
+                            if target23 not in candidateGuides:
+                                candidateGuides.add(target23)
+                                guideBatchinator.recordEntry([
+                                    target23,
+                                    chr,
+                                    start,
+                                    start + 23,
+                                    strand,
+                                    f'{chr}:{pos}_{match_pos}_{allele_seq}_{strand}:{idx}'
+                                ])
                             else:
-                                # Record duplicate guide
-                                duplicateGuides.add(guide[0])
+                                duplicateGuides.add(target23)
                                 numDuplicateGuides += 1
-                    # Update sequence and sequence header
-                    seqHeader = line[1:]
-                    seq = ''
-                # Sequence line, section of existing sequence
-                else:
-                    # Append section to total sequence
-                    seq += line.strip()
 
-            # Process the last sequence
-            for guide in processSequence(seq):
-                numIdentifiedGuides += 1
-                # Check if guide has been seen before
-                if guide[0] not in candidateGuides:
-                    # Record guide
-                    candidateGuides.add(guide[0])
-                    # Record candidate guide to temp file
-                    guideBatchinator.recordEntry(guide)
-                else:
-                    # Record duplicate guide
-                    duplicateGuides.add(guide[0])
-                    numDuplicateGuides += 1
+        if numIdentifiedGuides > 0:
+            duplicatePercent = round(numDuplicateGuides / numIdentifiedGuides * 100.0, 3)
+            printer(f'\tIdentified {numIdentifiedGuides:,} possible target sites in this file.')
+            printer(f'\tOf these, {len(duplicateGuides):,} are not unique. These sites occur a total of {numDuplicateGuides} times.')
+            printer(f'\tRemoving {numDuplicateGuides:,} of {numIdentifiedGuides:,} ({duplicatePercent}%) guides.')
+            printer(f'\t{len(candidateGuides):,} distinct guides have been discovered so far.')
 
-        duplicatePercent = round(numDuplicateGuides / numIdentifiedGuides * 100.0, 3)
-        printer(f'\tIdentified {numIdentifiedGuides:,} possible target sites in this file.')
-        printer(f'\tOf these, {len(duplicateGuides):,} are not unique. These sites occur a total of {numDuplicateGuides} times.')
-        printer(f'\tRemoving {numDuplicateGuides:,} of {numIdentifiedGuides:,} ({duplicatePercent}%) guides.')
-        printer(f'\t{len(candidateGuides):,} distinct guides have been discovered so far.')
-
+        completedSizeBytes += seqFileSize
         completedPercent = round(completedSizeBytes / totalSizeBytes * 100.0, 3)
         printer(f'\tExtracted from {completedPercent}% of input')
 
@@ -268,9 +367,7 @@ def Crackling(configMngr):
         csvWriter.writerow(DEFAULT_GUIDE_PROPERTIES_ORDER)
 
     # Clean up unused variables
-    os.unlink(parsedFile.name)
     del candidateGuides
-    del recordedSequences
 
 
     batchFileId = 0
@@ -301,6 +398,7 @@ def Crackling(configMngr):
                     candidateGuides[row[0]]['start'] = row[2]
                     candidateGuides[row[0]]['end'] = row[3]
                     candidateGuides[row[0]]['strand'] = row[4]
+                    candidateGuides[row[0]]['vcfData'] = row[5]
 
         printer(f'\tLoaded {len(candidateGuides):,} guides')
 
@@ -432,7 +530,7 @@ def Crackling(configMngr):
                     check=True
                 )
 
-                os.replace('RNAfold_output.fold' ,configMngr['rnafold']['output'])
+                shutil.move('RNAfold_output.fold' ,configMngr['rnafold']['output'])
 
                 printer('\t\tStarting to process the RNAfold results.')
 

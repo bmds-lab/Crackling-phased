@@ -13,6 +13,7 @@ MODULE_SPECIFICITY = 'specificity'
 DEFAULT_GUIDE_PROPERTIES = {
     'seq'                       : "",
     'header'                    : "",
+    'vcfData'                   : "",
     'isUnique'                  : CODE_ACCEPTED,
     'start'                     : CODE_UNTESTED,
     'end'                       : CODE_UNTESTED,
@@ -43,6 +44,7 @@ DEFAULT_GUIDE_PROPERTIES_ORDER = [
     'seq',
     'sgrnascorer2score',
     'header',
+    'vcfData',
     'start',
     'end',
     'strand',
