@@ -39,7 +39,7 @@ This tool has been forked from our open-source tool called Crackling, which is a
     cd ~/Crackling-phased
     ```
 
-2. Install using pip
+2. Be sure that your current working directory is `Crackling-phased`, containing the `setup.py` file. Install using pip:
 
     ```bash
     python3.9 -m pip install .
@@ -60,8 +60,9 @@ This tool has been forked from our open-source tool called Crackling, which is a
     Compiler: gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.9)
     Options: -O3 -m64 -msse2 -funroll-loops -g3 -std=c++98 -DPOPCNT_CAPABILITY
     Sizeof {int, long, long long, void*, size_t, off_t}: {4, 8, 8, 8, 8, 8}
+    ```
     
-    
+    ```bash
     $ RNAfold --version
     RNAfold 2.4.14
     ```
@@ -92,6 +93,22 @@ This tool has been forked from our open-source tool called Crackling, which is a
     
 5. Configure the Crackling pipeline by editing `config.ini`.
 
+    You will most likely need to update:
+
+       - `general` -> `name`
+
+       - `input` -> `exon-sequences`
+
+       - `input` -> `vcf-file`
+
+       - `input` -> `offtarget-sites`
+
+       - `input` -> `bowtie2-index`
+
+       - `output` -> `dir`
+
+       - `sgrnascorer2` -> `model`
+
 5. Run the pipeline: 
 
     ```bash
@@ -107,6 +124,8 @@ The package provides a number of utilities:
 - Retraining the provided sgRNAScorer 2.0 model (if needed)
 
 ## Off-target Indexing
+
+This utility does not use `config.ini` but rather, command-line arguments are used to specify inputs and outputs.
 
 1. Extract off-target sites:
 
@@ -138,12 +157,14 @@ The package provides a number of utilities:
    *For a 20bp sgRNA where up to four mismatches are allowed, use a slice width of eight (4 mismatches \* 2 bits per mismatch)*
 
    ```bash
-   createIsslIndex -t ~/genomes/mouse_offtargets.txt -l 20 -w 8 -o ~/genomes/mouse_offtargets.txt.issl
+   bin/isslCreateIndex ~/genomes/mouse_offtargets.txt 20 8 ~/genomes/mouse_offtargets.txt.issl
    ```
 
    A progress indicator is printed to *stderr*, formatted as `<current line of input file> / <number of lines in input file> : <running total of distinct sites>`.
 
 ## Counting targeted transcripts per guide RNA
+
+This utility is useful after you have ran HaploCrackling.
 
 Using the CLI command `countHitTranscripts`:
 
@@ -199,7 +220,7 @@ Pickled to: /tmp/tmp68qd5n6y.p
 
 ## Training the sgRNAScorer 2.0 model (if needed)
 
-We provided a pre-trained model, however, dependent on your environment (Python and package versions), you may need to retrain it, using the CLI command `trainModel`. All arguments to this command are optional, as the utility will compute the default values for you.
+We have provided a pre-trained model, however, dependent on your environment (Python and package versions), you may need to retrain it, using the CLI command `trainModel`. The model is saved to file and may break when newer versions of sklearn try to load it. All arguments to this command are optional, as the utility will compute the default values for you.
 
 You can run the command without any arguments:
 
