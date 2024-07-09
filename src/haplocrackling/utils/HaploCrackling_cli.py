@@ -1,9 +1,9 @@
-from crackling import Crackling
-from crackling import ConfigManager
 from pathlib import Path
-from crackling.Helpers import printer
-
 import argparse
+
+from haplocrackling import HaploCrackling
+from haplocrackling import ConfigManager
+from haplocrackling.Helpers import printer
 
 def main():
     parser = argparse.ArgumentParser()
@@ -18,7 +18,7 @@ def main():
     else:
         printer('HaploCrackling is starting...')
 
-    Crackling(cm)
+    HaploCrackling(cm)
     
 if __name__ == '__main__':
     main()

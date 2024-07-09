@@ -14,21 +14,22 @@ setuptools.setup(
     description='Faster and better CRISPR guide RNA design with the Crackling method',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/bmds-lab/HaploCrackling',
+    url='https://github.com/bmds-lab/Crackling-phased',
     project_urls = {
-        'Bug Tracker': 'https://github.com/bmds-lab/HaploCrackling/issues',
+        'Bug Tracker': 'https://github.com/bmds-lab/Crackling-phased/issues',
         'Lab website': 'http://biomedicaldatascience.com/'
     },
     package_dir={'': 'src'},
+    packages=setuptools.find_packages(where='src'),
     license=license,
     install_requires=[],
     python_requires='>=3.6',
     entry_points = {
         'console_scripts': [
-            'haplocrackling=crackling.utils.Crackling_cli:main',
-            'countHitTranscripts=crackling.utils.countHitTranscripts:main',
-            'extractOfftargets=crackling.utils.extractOfftargets:main',
-            'trainModel=crackling.utils.trainModel:main'
+            'Haplocrackling=haplocrackling.utils.HaploCrackling_cli:main',
+            'countHitTranscripts=haplocrackling.utils.countHitTranscripts:main',
+            'extractOfftargets=haplocrackling.utils.extractOfftargets:main',
+            'trainModel=haplocrackling.utils.trainModel:main'
         ],
     },
     include_package_data=True,

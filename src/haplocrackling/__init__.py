@@ -1,5 +1,5 @@
-from crackling.Crackling import Crackling
-from crackling.ConfigManager import ConfigManager
+from haplocrackling.HaploCrackling import HaploCrackling
+from haplocrackling.ConfigManager import ConfigManager
 
 '''
 "[If] a package’s __init__.py code defines a list named __all__, it is taken to 
@@ -9,6 +9,6 @@ a new version of the package is released."
 https://docs.python.org/3/tutorial/modules.html#importing-from-a-package
 '''
 __all__ = [
-    'Crackling',
+    'HaploCrackling',
     'ConfigManager'
 ]

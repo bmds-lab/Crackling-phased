@@ -1,6 +1,8 @@
 # HaploCrackling
 
-Computational design of allele-specific CRISPR guide RNAs for phased genomes
+**Computational design of allele-specific CRISPR guide RNAs for phased genomes**
+
+Bo Zhou, Steve S. Ho, Louis C. Leung, Thomas R. Ward, Marcus Ho, Melanie J. Plastini, Scott C. Vermilyea, Marina E. Emborg, Thaddeus G. Golos, Megan A. Albertelli, Philippe Mourrain, Dimitri Perrin, Karen J. Parker, Alexander E. Urban.  Haplotype-phased common marmoset embryonic stem cells for genome editing using CRISPR/Cas9. bioRxiv, 21 October 2020, 373886; doi: https://doi.org/10.1101/373886 
 
 ## Preamble
 
@@ -18,26 +20,30 @@ This tool has been forked from our open-source tool called Crackling, which is a
 
 - Python v3.8+
 
+## Input files
+
+- FASTA sequence file
+
+- VCF file
+
+- Bowtie2 index of FASTA files (see below for instructions)
+
+- List of off-target sites (see below for instructions)
+
 ## Installation & Usage
 
-1. Clone or [download](https://github.com/bmds-lab/Crackling/archive/master.zip) the source.
+1. Clone or [download](https://github.com/bmds-lab/Crackling-phased/archive/master.zip) the source.
 
     ```bash
-    git clone https://github.com/bmds-lab/Crackling.git ~/Crackling/
-    cd ~/Crackling
+    git clone https://github.com/bmds-lab/Crackling-phased.git ~/Crackling-phased/
+    cd ~/Crackling-phased
     ```
 
 2. Install using pip
 
     ```bash
-    python3.6 -m pip install -e .
+    python3.9 -m pip install .
     ```
-
-    Important: the dot `.` indicates that *pip* will run `setup.py` from the current working directory.
-
-    The `-e` flag is for *editable*,
-
-    > -e	Install a project in editable mode (i.e. setuptools "develop mode") from a local project path or a VCS url.
 
 2. Configure the pipeline. See `config.ini`.
 
@@ -45,7 +51,7 @@ This tool has been forked from our open-source tool called Crackling, which is a
 
     Check these are reachable by typing (the version numbers and directories may differ slightly):
 
-    ```
+    ```bash
     $ bowtie2 --version
     /home/<user>/bowtie2-2.3.4.1/bowtie2-align-s version 2.3.4.1
     64-bit
@@ -72,7 +78,7 @@ This tool has been forked from our open-source tool called Crackling, which is a
     
     Our recommended usage:
     
-    ```
+    ```bash
     bowtie2-build --threads 128 input-file output-file
     ```
     
@@ -105,13 +111,13 @@ The package provides a number of utilities:
 1. Extract off-target sites:
 
    ```bash
-   extractOfftargets <output-file>  {<input-files>... | input-dir>}
+    extractOfftargets [-h] --vcf VCF [--maxOpenFiles MAXOPENFILES] [--threads THREADS] output inputs [inputs ...]
    ```
 
    For example:
 
-   ```
-   extractOfftargets ~/genomes/mouse_offtargets.txt ~/genomes/mouse.fa
+   ```bash
+   extractOfftargets --vcf ~/genomes/mouse.vcf ~/genomes/mouse_offtargets.txt ~/genomes/mouse.fa
    ```
 
    The input provided can be:
@@ -120,60 +126,22 @@ The package provides a number of utilities:
 
    - A directory, for which we scan every file by parsing, using [glob](https://docs.python.org/3/library/glob.html): `<input-dir>/*`
 
-   Note: Unlike previous versions, sorting the extracted off-targets is no longer required as extractOfftargets.py completes this automatically now.
-
 2. Generate the index:
 
-   ```
-   usage: createIsslIndex [-h] -t OFFTARGETS -l GUIDELENGTH -w SLIDEWIDTH -o
-                          OUTPUT [-b BINARY]
-   
-   optional arguments:
-     -h, --help            show this help message and exit
-     -t OFFTARGETS, --offtargets OFFTARGETS
-                           A text file containing off-target sites
-     -l GUIDELENGTH, --guidelength GUIDELENGTH
-                           The length of an off-target site
-     -w SLIDEWIDTH, --slidewidth SLIDEWIDTH
-                           The ISSL slice width in bits
-     -o OUTPUT, --output OUTPUT
-                           A filepath to save the ISSL index
-     -b BINARY, --binary BINARY
-                           A filepath to the createIsslIndex binary (optional)
+   ```bash
+   $ bin/isslCreateIndex
+   Usage: bin/isslCreateIndex [offtargetSites.txt] [sequence length] [slice width (bits)] [sissltable]
    ```
 
    For example:
 
    *For a 20bp sgRNA where up to four mismatches are allowed, use a slice width of eight (4 mismatches \* 2 bits per mismatch)*
 
+   ```bash
+   createIsslIndex -t ~/genomes/mouse_offtargets.txt -l 20 -w 8 -o ~/genomes/mouse_offtargets.txt.issl
    ```
-   createIsslIndex -t ~/genomes/mouse_offtargets.txt -l 20 -w 8 - o ~/genomes/mouse_offtargets-sorted.txt.issl
-   ```
 
-   A progress indicator is printed to *stderr*, like so:
-
-   > 8576/8583 : 6548
-   >
-   > 8577/8583 : 6549
-   >
-   > 8578/8583 : 6549
-   >
-   > 8579/8583 : 6549
-   >
-   > 8580/8583 : 6549
-   >
-   > 8581/8583 : 6549
-   >
-   > 8582/8583 : 6549
-   >
-   > 8583/8583 : 6550
-
-   formatted as `<current line of input file> / <number of lines in input file> : <running total of distinct sites>`.
-
-   This is indicating that the 6549'th distinct site has been seen on lines 8577 through 8582.
-
-   The indicator is provided for every 10,000 input lines that are processed, and for every of the last 100 input lines.
-
+   A progress indicator is printed to *stderr*, formatted as `<current line of input file> / <number of lines in input file> : <running total of distinct sites>`.
 
 ## Counting targeted transcripts per guide RNA
 
@@ -191,7 +159,7 @@ group:
   -a ANNOTATION, --annotation ANNOTATION
                         The GFF3 annotation file
   -c CRACKLING, --crackling CRACKLING
-                        The Crackling output file
+                        The HaploCrackling output file
   -o OUTPUT, --output OUTPUT
                         The output file
 ```
@@ -233,6 +201,14 @@ Pickled to: /tmp/tmp68qd5n6y.p
 
 We provided a pre-trained model, however, dependent on your environment (Python and package versions), you may need to retrain it, using the CLI command `trainModel`. All arguments to this command are optional, as the utility will compute the default values for you.
 
+You can run the command without any arguments:
+
+```bash
+trainModel
+```
+
+or, by specifying arguments:
+
 ```bash
 Using user specified arguments
 usage: trainModel [-h] -g GOOD -b BAD -s SPACERLENGTH -p PAMORIENTATION -l
@@ -248,15 +224,15 @@ optional arguments:
   -o SVMOUTPUT, --svmOutput SVMOUTPUT
 ```
 
-
-
 ## References
 
 Ben Langmead and Steven L Salzberg. Fast gapped-read alignment with Bowtie2. Nature Methods, 9(4):357, 2012.
 
-Bradford, J., & Perrin, D. (2019). A benchmark of computational CRISPR-Cas9 guide design methods. PLoS computational biology, 15(8), e1007274.
+Bradford, J., & Perrin, D. (2019). A benchmark of computational CRISPR-Cas9 guide design methods. PLoS Computational Biology, 15(8), e1007274.
 
-Bradford, J., & Perrin, D. (2019). Improving CRISPR guide design with consensus approaches. BMC genomics, 20(9), 931.
+Bradford, J., & Perrin, D. (2019). Improving CRISPR guide design with consensus approaches. BMC Genomics, 20(9), 931.
+
+Bradford, J., Chappell, T., & Perrin, D. (2022). Rapid whole-genome identification of high quality CRISPR guide RNAs with the Crackling method. The CRISPR Journal, 5(3), 410-421.
 
 Chari, R., Yeo, N. C., Chavez, A., & Church, G. M. (2017). sgRNA Scorer 2.0: a species-independent model to predict CRISPR/Cas9 activity. ACS synthetic biology, 6(5), 902-904.
 

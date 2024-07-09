@@ -12,8 +12,8 @@ To use:     extractOfftargets.py output-file  (input-files... | input-dir>) --vc
 
 import glob, multiprocessing, os, re, shutil, tempfile, heapq, argparse
 from ast import literal_eval
-from crackling.Helpers import *
-from crackling.Paginator import Paginator
+from haplocrackling.Helpers import *
+from haplocrackling.Paginator import Paginator
 
 # Defining the patterns used to detect sequences
 pattern_forward_offsite = r"(?=([ACG][ACGT]{19}[ACGT][AG]G))"

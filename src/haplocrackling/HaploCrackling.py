@@ -9,12 +9,12 @@ Config:
 
 import ast, csv, joblib, os, re, sys, time, tempfile, shutil
 
-from crackling.Paginator import Paginator
-from crackling.Batchinator import Batchinator
-from crackling.Constants import *
-from crackling.Helpers import *
+from haplocrackling.Paginator import Paginator
+from haplocrackling.Batchinator import Batchinator
+from haplocrackling.Constants import *
+from haplocrackling.Helpers import *
 
-def Crackling(configMngr):
+def HaploCrackling(configMngr):
     totalSizeBytes = configMngr.getDatasetSizeBytes()
     completedSizeBytes = 0
 
