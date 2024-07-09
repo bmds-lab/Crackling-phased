@@ -95,19 +95,19 @@ This tool has been forked from our open-source tool called Crackling, which is a
 
     You will most likely need to update:
 
-       - `general` -> `name`
+    - `general` -> `name`
 
-       - `input` -> `exon-sequences`
+    - `input` -> `exon-sequences`
 
-       - `input` -> `vcf-file`
+    - `input` -> `vcf-file`
 
-       - `input` -> `offtarget-sites`
+    - `input` -> `offtarget-sites`
 
-       - `input` -> `bowtie2-index`
+    - `input` -> `bowtie2-index`
 
-       - `output` -> `dir`
+    - `output` -> `dir`
 
-       - `sgrnascorer2` -> `model`
+    - `sgrnascorer2` -> `model`
 
 5. Run the pipeline: 
 
