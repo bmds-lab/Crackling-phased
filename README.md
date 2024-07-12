@@ -8,6 +8,8 @@ Bo Zhou, Steve S. Ho, Louis C. Leung, Thomas R. Ward, Marcus Ho, Melanie J. Plas
 
 This tool has been forked from our open-source tool called Crackling, which is available at https://github.com/bmds-lab/Crackling under the Berkeley Software Distribution (BSD) 3-Clause license.
 
+It uses the same gRNA design principles as Crackling, but applies them to candidate sites that are selected for being allele-specific.
+
 ## Dependencies
 
 - ISSL-based search off-target sites (included)
